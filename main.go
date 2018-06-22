@@ -126,6 +126,13 @@ func CheckExist(m_src map[string]int, key string, equal bool) bool {
 
     return true
 }
+func AfterTime(object_s, target_s string) (bool) {
+    loc, _ := time.LoadLocation("Local")
+    object_t, _ := time.ParseInLocation(TimeLayout, object_s, loc)
+    target_t, _ := time.ParseInLocation(TimeLayout, target_s, loc)
+
+    return object_t.After(target_t)
+}
 func SubTime(begin, end string) (int64) {
     loc, _ := time.LoadLocation("Local")
     t_begin, _ := time.ParseInLocation(TimeLayout, begin, loc)
@@ -195,7 +202,7 @@ func PathExists(path string) (bool, error) {
 }
 
 
-func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
+func ParseEmployeeInfo(file1, earning_path, ratio_path, target_time string) error {
     f,err := os.Open(file1)
     if(err != nil){
         panic(err)
@@ -208,15 +215,14 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
     var E_tmp EmployeeInfos
     m_Find_Region := make(map[string]string)
     m_Find_All_ByUM := make(map[string]*EmployeeProperty)
-    num_t:=0
+    //num_t:=0
     for {
         record, err := reader.Read()
-        if num_t <= 5 {
+        /*if num_t <= 5 {
             num_t += 1
             fmt.Println("------------------=")
             fmt.Println(record)
-            //time.Sleep(3 * time.Second)
-        }
+        }*/
         if err == io.EOF {
             fmt.Println("finish")
             break
@@ -234,7 +240,7 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
                     G_m_PropertyIndex["Department"] = ind
                 } else if label == "组名称" {
                     G_m_PropertyIndex["GroupName"] = ind
-                } else if strings.EqualFold(label, "UM账号") {
+                } else if strings.HasPrefix(label, "UM") {
                     G_m_PropertyIndex["UMID"] = ind
                 //} else if strings.HasPrefix(label, "UM") {
                 /*} else if strings.HasPrefix(label, "UM") {
@@ -266,9 +272,12 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
         if CheckExist(G_m_Center, record[G_m_PropertyIndex["Center"]], true) && CheckExist(G_m_Level, record[G_m_PropertyIndex["Level"]], true) && CheckExist(G_m_Department, record[G_m_PropertyIndex["Department"]], false) {
             now_str := time.Now().Format(TimeLayout)
             t_days := SubTime(record[G_m_PropertyIndex["ConvertTime"]], now_str)
-            fmt.Printf("convert:%s, now:%s, days:%d\n", record[G_m_PropertyIndex["ConvertTime"]], now_str, t_days)
-            if t_days < 183 || record[G_m_PropertyIndex["OldRegion"]] == "" {
-                fmt.Printf("t_days:%d, region:%s\n", t_days, record[G_m_PropertyIndex["OldRegion"]])
+            b_days := AfterTime(record[G_m_PropertyIndex["ConvertTime"]], target_time)
+            //fmt.Printf("convert:%s\n", record[G_m_PropertyIndex["ConvertTime"]])
+            //if b_days || (record[G_m_PropertyIndex["OldRegion"]] == "" && record[G_m_PropertyIndex["Center"]] != "合肥") {
+            if b_days || record[G_m_PropertyIndex["Department"]] == "" {
+                //fmt.Printf("t_days:%d, center:%s,region:%s\n", t_days, record[G_m_PropertyIndex["Center"]], record[G_m_PropertyIndex["OldRegion"]])
+                //fmt.Printf("center:%s,region:%s\n", record[G_m_PropertyIndex["Center"]], record[G_m_PropertyIndex["OldRegion"]])
                 continue
             }
             e_obj := new(EmployeeProperty)
@@ -281,10 +290,6 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
             e_obj.ConvertTime = record[G_m_PropertyIndex["ConvertTime"]]
             e_obj.ConvertDuration = t_days
             e_obj.OldRegion = record[G_m_PropertyIndex["OldRegion"]]
-            if num_t <= 5 {
-                fmt.Println("Center, Department, GroupName, UMID, RealDepartment, RealGroup, ConvertTime, ConvertDuration, OldRegion")
-                fmt.Println(*e_obj)
-            }
 
             E_tmp = append(E_tmp, *e_obj)
 
@@ -292,7 +297,7 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path string) error {
         }
     }
     var E_ret EmployeeInfos
-    fmt.Println(E_tmp)
+    //fmt.Println(E_tmp)
     for _, e_obj_f := range E_tmp {
         new_obj := e_obj_f
         if v, ok := m_Find_Region[e_obj_f.Center + e_obj_f.Department]; ok {
@@ -361,15 +366,15 @@ func ParseRealEarning(m_src map[string]*EmployeeProperty, earning_path, ratio_pa
     reader := csv.NewReader(decoder.NewReader(f))
     b_firstline := true
     var E_tmp EarningInfos
-    num_t := 0
+    //num_t := 0
     for {
         record, err := reader.Read()
-        if num_t <= 5 {
+        /*if num_t <= 5 {
             num_t += 1
             fmt.Println(record)
             fmt.Println("------------------=")
             //time.Sleep(3 * time.Second)
-        }
+        }*/
         if err == io.EOF {
             fmt.Println("finish")
             break
@@ -387,10 +392,10 @@ func ParseRealEarning(m_src map[string]*EmployeeProperty, earning_path, ratio_pa
                 } else if label == "名单类型" {
                     G_m_EarningIndex["ListType"] = ind
                 //} else if label == "实收件(承保)" {
-                } else if strings.HasPrefix(label, "实收件") {
+                } else if strings.HasPrefix(label, "实收件（") {
                     G_m_EarningIndex["RealUnit"] = ind
                 //} else if label == "实收年化规模保费(承保)" {
-                } else if strings.HasPrefix(label, "实收年化规模保费") {
+                } else if strings.HasPrefix(label, "实收年度化规模保费（") {
                     G_m_EarningIndex["RealCost"] = ind
                 }
             }
@@ -403,6 +408,9 @@ func ParseRealEarning(m_src map[string]*EmployeeProperty, earning_path, ratio_pa
 
         if CheckExist(G_m_Center, record[G_m_EarningIndex["Center"]], true) {
             if t_obj, ok := m_src[record[G_m_EarningIndex["UMID"]]]; ok {
+                if t_obj.Region == "" {
+                    continue
+                }
                 e_obj := new(EarningProperty)
                 e_obj.UMID = record[G_m_EarningIndex["UMID"]]
                 e_obj.Center = record[G_m_EarningIndex["Center"]]
@@ -410,7 +418,16 @@ func ParseRealEarning(m_src map[string]*EmployeeProperty, earning_path, ratio_pa
                 e_obj.Department = t_obj.Department
                 e_obj.Group = t_obj.GroupName
                 e_obj.ListType = record[G_m_EarningIndex["ListType"]]
-                e_obj.Ratio = m_ratios[e_obj.ListType]
+                if e_obj.ListType == "" {
+                    e_obj.Ratio = "0.3"
+                } else {
+                    //e_obj.Ratio = m_ratios[e_obj.ListType]
+                    if tmp_ratio, ok_ratio := m_ratios[e_obj.ListType]; ok_ratio {
+                        e_obj.Ratio = tmp_ratio
+                    } else {
+                        e_obj.Ratio = "0.3"
+                    }
+                }
                 e_obj.RealUnit = record[G_m_EarningIndex["RealUnit"]]
                 e_obj.RealCost = record[G_m_EarningIndex["RealCost"]]
 
@@ -434,7 +451,8 @@ func main(){
     file1 := flag.String("file1", "寿险在职人员清单.csv", "path")
     earning_path := flag.String("file4", "全渠道实收保费统计月回算日报.csv", "path")
     ratio_path := flag.String("file5", "折标系数.csv", "path")
+    target_time := flag.String("t", "2016/6/9", "path")
     flag.Parse()
-    ParseEmployeeInfo(*file1, *earning_path, *ratio_path)
+    ParseEmployeeInfo(*file1, *earning_path, *ratio_path, *target_time)
     //time.Sleep(30 * time.Second)
 }
