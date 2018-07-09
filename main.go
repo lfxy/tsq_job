@@ -302,7 +302,13 @@ func ParseEmployeeInfo(file1, earning_path, ratio_path, target_time string) erro
         new_obj := e_obj_f
         if v, ok := m_Find_Region[e_obj_f.Center + e_obj_f.Department]; ok {
             if v == "" {
-                new_obj.Region = "总计"
+                if new_obj.Center == "合肥" {
+                    new_obj.Region = "总计"
+                } else {
+                    new_obj.Region = new_obj.OldRegion
+                    new_obj.Department = new_obj.RealDepartment
+                    new_obj.GroupName = new_obj.RealGroup
+                }
             } else {
                 new_obj.Region = v
             }
